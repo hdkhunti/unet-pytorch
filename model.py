@@ -132,7 +132,7 @@ class UNet(nn.Module):
         the tranpose convolution (specified by upmode='transpose')
     """
 
-    def __init__(self, num_classes, in_channels=3, depth=5, 
+    def __init__(self, num_classes, in_channels=1, depth=5, 
                  start_filts=64, up_mode='transpose', 
                  merge_mode='concat'):
         """
@@ -219,6 +219,7 @@ class UNet(nn.Module):
 
     def forward(self, x):
         encoder_outs = []
+        ori_input = x
          
         # encoder pathway, save outputs for merging
         for i, module in enumerate(self.down_convs):
@@ -232,15 +233,18 @@ class UNet(nn.Module):
         # No softmax is used. This means you need to use
         # nn.CrossEntropyLoss is your training script,
         # as this module includes a softmax already.
-        x = self.conv_final(x)
+        x = self.conv_final(x) + ori_input
         return x
 
 if __name__ == "__main__":
     """
     testing
     """
-    model = UNet(3, depth=5, merge_mode='concat')
-    x = Variable(torch.FloatTensor(np.random.random((1, 3, 320, 320))))
+    model = UNet(1, depth=5, merge_mode='concat').cuda()
+    print(model)
+    x = Variable(torch.FloatTensor(np.random.random((1, 1, 512, 512)))).cuda()
+    print(x.shape)
     out = model(x)
-    loss = torch.sum(out)
-    loss.backward()
+    print(out.shape)
+    # loss = torch.sum(out)
+    # loss.backward()
