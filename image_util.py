@@ -324,6 +324,20 @@ class ImageDataProvider_hdf5(BaseDataProvider):
             img,label=flipping(img,label)
 
         return img,label
+
+    def __getitem__(self,item):
+        self._cylce_file()
+        id=self.ids[self.file_idx]
+        #image_name = self.data_files[self.file_idx]
+        #label_name = image_name.replace(self.data_suffix, self.mask_suffix)
+
+        img = self.data_train[:,:,0,item]#self._load_file(image_name, np.float32)
+        label = self.data_label[:,:,0,item]#self._load_file(label_name, np.bool)
+        if self.is_flipping:
+            img,label=flipping(img,label)
+
+        return np.expand_dims(img,axis=0),np.expand_dims(label,axis=0)
+
     
     def __len__(self):
         return self.data_train.shape[-1]
