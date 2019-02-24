@@ -23,6 +23,12 @@ from PIL import Image
 import h5py
 import scipy.io as sio
 
+import matplotlib.pyplot as plt
+from skimage.io import imread
+#from skimage import data_dir
+from skimage.transform import radon,iradon, rescale
+import pdb 
+DEBUG = False
 def flipping(img,gt):
     if np.random.rand(1)>0.5:
         out=np.fliplr(img)
@@ -35,6 +41,22 @@ def flipping(img,gt):
         out_gt=np.flipud(out_gt)
     return out, out_gt
 
+def iRadon(Sinogram,DownSampRatio):
+    # iRadon transform
+    Sinogram = Sinogram.transpose()
+    NumMeas = Sinogram.shape[1]
+    NumImage = Sinogram.shape[-1]
+    FBPimages = np.zeros((512,512,1,NumImage))
+    theta = np.linspace(180.0/NumMeas,180.0,NumMeas/DownSampRatio,endpoint=False)
+    # This loop can be parallized for speedup, seems very slow right now
+    for i in range(NumImage):
+        FBPimages[:,:,0,i] = iradon(Sinogram[:,:,0,i],theta,output_size=512,circle=True)
+    
+    if(DEBUG):
+        plt.imshow(FBPimages[:,:,0,0])
+        plt.show()
+        pdb.set_trace()
+    return FBPimages
 
 class BaseDataProvider(object):
     """
@@ -234,7 +256,7 @@ class ImageDataProvider_hdf5(BaseDataProvider):
 
     """
 
-    def __init__(self, search_path, a_min=None, a_max=None, shuffle_data=True, is_flipping=True,n_class = 1):
+    def __init__(self, search_path,SinoVar,GrdTruthVar,DownSampRatio=2, a_min=None, a_max=None, shuffle_data=True, is_flipping=True,n_class = 1):
         super(ImageDataProvider_hdf5, self).__init__(a_min, a_max)
         self.file_idx = -1
         self.shuffle_data = shuffle_data
@@ -242,9 +264,22 @@ class ImageDataProvider_hdf5(BaseDataProvider):
         self.n_class = n_class
 
         self.data_files = self._find_data_files(search_path)
+        Sinogram=self._load_file(self.data_files[0],SinoVar)
+        print(np.shape(Sinogram))
+        self.data_train = iRadon(Sinogram,DownSampRatio=DownSampRatio)
+        
+        #self.data_train=self._load_file(self.data_files[0],'sparse')
+        #self.data_label=self._load_file(self.data_files[0],'label')
+        self.data_label=self._load_file(self.data_files[0],GrdTruthVar)
+        self.data_label = self.data_label.transpose()
+        print(np.shape(self.data_label))
+        if DEBUG:
+            plt.imshow(self.data_train[:,:,0,0])
+            plt.show()
+            plt.imshow(self.data_label[:,:,0,0])
+            plt.show()
+            pdb.set_trace()
 
-        self.data_train=self._load_file(self.data_files[0],'sparse')
-        self.data_label=self._load_file(self.data_files[0],'label')
         self.tN=self.data_train.shape[-1]
         self.ids=np.arange(self.tN)
         if self.shuffle_data:
@@ -289,7 +324,9 @@ class ImageDataProvider_hdf5(BaseDataProvider):
             img,label=flipping(img,label)
 
         return img,label
-
+    
+    def __len__(self):
+        return self.data_train.shape[-1]
 
 
 
@@ -351,7 +388,7 @@ class ImageDataProvider_mat(BaseDataProvider):
         self.file_idx += 1
         if self.file_idx >= self.tN:#len(self.data_files):
             self.file_idx = -1
-            if self.shuffle_data:
+            if self.shuffle_data: 
                 np.random.shuffle(self.ids)
                 #np.random.shuffle(self.data_files)
 
@@ -370,3 +407,7 @@ class ImageDataProvider_mat(BaseDataProvider):
 
     def __len__(self):
         return self.data_train.shape[-1]
+
+if __name__ == '__main__':
+    DataPath = ".\Data\CT_Head_Neck_Train.mat"
+    ImageDataProvider_hdf5(DataPath,SinoVar='SinoTrainList',GrdTruthVar='FBPTrainList',DownSampRatio=2,is_flipping=False)

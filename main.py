@@ -23,6 +23,7 @@ import torchvision.datasets as datasets
 import torchvision.models as models
 
 from image_util import ImageDataProvider_mat
+from image_util import ImageDataProvider_hdf5
 from model import UNet
 
 model_names = sorted(name for name in models.__dict__
@@ -73,7 +74,10 @@ parser.add_argument('--multiprocessing-distributed', action='store_true',
                          'N processes per node, which has N GPUs. This is the '
                          'fastest way to use PyTorch for either single node or '
                          'multi node data parallel training')
-
+parser.add_argument('--TrainData',type=str,
+                    help='Training .mat file path')
+parser.add_argument('--TestData',type=str,
+                    help='Tet .mat file path')
 best_acc1 = 0
 
 
@@ -134,12 +138,21 @@ def main_worker(gpu, ngpus_per_node, args):
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
     else:
         train_sampler = None
-
-    train_loader = torch.utils.data.DataLoader(ImageDataProvider_mat("../Paper_data/train_elips.mat",is_flipping=False),
+    #temp = ImageDataProvider_hdf5("../NaturalImagesTrainSet.mat",is_flipping=False)
+    print(train_sampler)
+    #TrainDataPath = ".\Data\CT_Head_Neck_Train.mat"
+    print("Training Data: %s"%args.TrainData)
+    TrainDataPath = args.TrainData
+    train_loader = torch.utils.data.DataLoader(\
+        ImageDataProvider_hdf5(TrainDataPath,SinoVar='SinoTrainList',GrdTruthVar='FBPTrainList',DownSampRatio=2,is_flipping=False),
         batch_size=args.batch_size, shuffle=(train_sampler is None),
         num_workers=args.workers, pin_memory=True, sampler=train_sampler)
-
-    val_loader = torch.utils.data.DataLoader(ImageDataProvider_mat("../Paper_data/test_elips.mat",shuffle_data=False,is_flipping=False),
+    
+    #TestDataPath = ".\Data\CT_Head_Neck_Test.mat"
+    print("Test Data: %s"%args.TestData)
+    TestDataPath = args.TestData
+    val_loader = torch.utils.data.DataLoader(\
+        ImageDataProvider_hdf5(TestDataPath,SinoVar='SinoTrainList',GrdTruthVar='FBPTrainList',DownSampRatio=2,is_flipping=False),
         batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=True)
 
@@ -174,7 +187,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
         
         #plt.imshow(input[0,:,:,:].squeeze().data.numpy(),cmap='gray')
         #plt.show()
-
+        
         if args.gpu is not None:
             input = input.cuda(args.gpu, non_blocking=True)#async=True) #non_blocking=True)#
         target = target.cuda(args.gpu, non_blocking=True)#async=True) #non_blocking=True)
@@ -192,6 +205,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
 
         # measure elapsed time
         batch_time.update(time.time() - end)
+
         end = time.time()
 
         if i % args.print_freq == 0:
@@ -239,7 +253,6 @@ def validate(val_loader, model, criterion, epoch, args):
                       'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                       'Loss {loss.val:.4f} ({loss.avg:.4f})\t'.format(
                        i, len(val_loader), batch_time=batch_time, loss=losses))
-
     return losses.avg
 
 
