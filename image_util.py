@@ -50,7 +50,8 @@ def iRadon(Sinogram,DownSampRatio):
     theta = np.linspace(180.0/NumMeas,180.0,NumMeas/DownSampRatio,endpoint=False)
     # This loop can be parallized for speedup, seems very slow right now
     for i in range(NumImage):
-        FBPimages[:,:,0,i] = iradon(Sinogram[:,:,0,i],theta,output_size=512,circle=True)
+        FBPimages[:,:,0,i] = iradon(Sinogram[:,np.arange(0,NumMeas,DownSampRatio),0,i],theta,output_size=512,circle=True)
+
     
     if(DEBUG):
         plt.imshow(FBPimages[:,:,0,0])

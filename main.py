@@ -144,7 +144,7 @@ def main_worker(gpu, ngpus_per_node, args):
     print("Training Data: %s"%args.TrainData)
     TrainDataPath = args.TrainData
     train_loader = torch.utils.data.DataLoader(\
-        ImageDataProvider_hdf5(TrainDataPath,SinoVar='Sinogram',GrdTruthVar='FBPImage',DownSampRatio=1,is_flipping=False),
+        ImageDataProvider_hdf5(TrainDataPath,SinoVar='Sinogram',GrdTruthVar='FBPImage',DownSampRatio=2,is_flipping=False),
         batch_size=args.batch_size, shuffle=(train_sampler is None),
         num_workers=args.workers, pin_memory=True, sampler=train_sampler)
     
@@ -152,7 +152,7 @@ def main_worker(gpu, ngpus_per_node, args):
     print("Test Data: %s"%args.TestData)
     TestDataPath = args.TestData
     val_loader = torch.utils.data.DataLoader(\
-        ImageDataProvider_hdf5(TestDataPath,SinoVar='Sinogram',GrdTruthVar='FBPImage',DownSampRatio=1,is_flipping=False),
+        ImageDataProvider_hdf5(TestDataPath,SinoVar='Sinogram',GrdTruthVar='FBPImage',DownSampRatio=2,is_flipping=False),
         batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=True)
 
