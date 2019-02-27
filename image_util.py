@@ -41,20 +41,31 @@ def flipping(img,gt):
         out_gt=np.flipud(out_gt)
     return out, out_gt
 
-def iRadon(Sinogram,DownSampRatio):
+def iRadon(Sinogram, snr_db, DownSampRatio, DEBUG = False):
     # iRadon transform
+
     Sinogram = Sinogram.transpose()
+    Nviews  = Sinogram.shape[0]
     NumMeas = Sinogram.shape[1]
     NumImage = Sinogram.shape[-1]
     FBPimages = np.zeros((512,512,1,NumImage))
+
+    # add Gaussian Noise to input sinogram image
+    norm_sinogram = np.linalg.norm(Sinogram, 'fro')
+    sigma_noise = 1 / np.sqrt(10 ** (snr_db / 10) / (norm_sinogram ** 2 / (Nviews * NumMeas)))
+    noise = np.random.normal(0, sigma_noise, (Nviews, NumMeas))
+    # print("Noise = ",noise);
+
     theta = np.linspace(180.0/NumMeas,180.0,NumMeas/DownSampRatio,endpoint=False)
     # This loop can be parallized for speedup, seems very slow right now
     for i in range(NumImage):
-        FBPimages[:,:,0,i] = iradon(Sinogram[:,np.arange(0,NumMeas,DownSampRatio),0,i],theta,output_size=512,circle=True)
-
+        NoisySinogram = Sinogram + noise
+        #FBPimages[:, :, 0, i] = iradon(NoisySinogram[:,np.arange(0, NumMeas, DownSampRatio), 0, i], theta, output_size=512, circle=True)
+        FBP = iradon(NoisySinogram[:, np.arange(0, NumMeas, DownSampRatio), 0, i], theta, output_size=514, circle=True)
+        FBPimages[:, :, 0, i] = FBP[np.arange(1, 513),np.arange(1, 513)]
     
     if(DEBUG):
-        plt.imshow(FBPimages[:,:,0,0])
+        plt.imshow(FBPimages[:, :, 0, 0])
         plt.show()
         pdb.set_trace()
     return FBPimages
@@ -257,7 +268,7 @@ class ImageDataProvider_hdf5(BaseDataProvider):
 
     """
 
-    def __init__(self, search_path,SinoVar,GrdTruthVar,DownSampRatio=2, a_min=None, a_max=None, shuffle_data=True, is_flipping=True,n_class = 1):
+    def __init__(self, search_path,SinoVar,GrdTruthVar,DownSampRatio=2, a_min=None, a_max=None, shuffle_data=True, is_flipping=True,n_class = 1,DEBUG = FALSE):
         super(ImageDataProvider_hdf5, self).__init__(a_min, a_max)
         self.file_idx = -1
         self.shuffle_data = shuffle_data
@@ -267,7 +278,7 @@ class ImageDataProvider_hdf5(BaseDataProvider):
         self.data_files = self._find_data_files(search_path)
         Sinogram=self._load_file(self.data_files[0],SinoVar)
         print(np.shape(Sinogram))
-        self.data_train = iRadon(Sinogram,DownSampRatio=DownSampRatio)
+        self.data_train = iRadon(Sinogram,DownSampRatio=DownSampRatio, DEBUG = DEBUG)
         
         #self.data_train=self._load_file(self.data_files[0],'sparse')
         #self.data_label=self._load_file(self.data_files[0],'label')
@@ -424,5 +435,10 @@ class ImageDataProvider_mat(BaseDataProvider):
         return self.data_train.shape[-1]
 
 if __name__ == '__main__':
-    DataPath = ".\Data\CT_Head_Neck_Train.mat"
-    ImageDataProvider_hdf5(DataPath,SinoVar='SinoTrainList',GrdTruthVar='FBPTrainList',DownSampRatio=2,is_flipping=False)
+    DataPath = ".\Data\CT_Head_Neck_Validate.mat"
+    ImageDataProvider_hdf5( DataPath,
+                            SinoVar='SinoTrainList',
+                            GrdTruthVar='FBPTrainList',
+                            DownSampRatio=2,
+                            is_flipping=False,
+                            DEBUG = True)
