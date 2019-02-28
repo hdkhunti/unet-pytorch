@@ -40,6 +40,34 @@ def flipping(img,gt):
         out=np.flipud(out)
         out_gt=np.flipud(out_gt)
     return out, out_gt
+def computeRegressedSNR(rec,oracle):
+
+    # type convert oracle and recreated data
+    oracle = np.array(oracle,dtype=float);
+    #print("oracle = ",oracle);
+    rec = np.array(rec,dtype=float);
+    #print("rec = ",rec);
+    
+    # perform required operations
+    sumP = oracle.sum();
+    sumI = rec.sum();
+    IP = oracle*rec;
+    sumIP = IP.sum();
+    I2 = rec**2;
+    sumI2 = I2.sum();
+    (Nrows_oracle,Ncols_oracle) = np.shape(oracle);
+    Noracle = Nrows_oracle*Ncols_oracle;
+    A = np.array(([sumI2,sumI],[sumI,Noracle]),dtype=float);
+    b = np.array(([sumIP],[sumP]),dtype=float);
+    A_pinv = np.linalg.pinv(A);
+    c = np.matmul(A_pinv,b);
+    rec = c[0]*rec + c[1];
+    diff2 = (oracle - rec)**2;
+    err = diff2.sum();
+    P2 = oracle**2;
+    SNR = 10*np.log10(P2.sum()/err);
+    
+    return SNR;
 
 def iRadon(Sinogram, snr_db, DownSampRatio, DEBUG = False):
     # iRadon transform
@@ -62,7 +90,7 @@ def iRadon(Sinogram, snr_db, DownSampRatio, DEBUG = False):
         #FBPimages[:, :, 0, i] = iradon(NoisySinogram[:,np.arange(0, NumMeas, DownSampRatio), 0, i], theta, output_size=512, circle=True)
         FBP = iradon(NoisySinogram[:, np.arange(0, NumMeas, DownSampRatio)], theta, output_size=512, circle=False)
         FBPimages[:, :, 0, i] = FBP 
-    
+
         if(DEBUG):
            plt.imsave('./testimg/fbpimage.png',FBPimages[:, :, 0, 0])
            #plt.figsave('./testimg/fbpimage.png')
@@ -277,7 +305,7 @@ class ImageDataProvider_hdf5(BaseDataProvider):
         self.data_files = self._find_data_files(search_path)
         Sinogram=self._load_file(self.data_files[0],SinoVar)
         print(np.shape(Sinogram))
-        self.data_train = iRadon(Sinogram,snr_db= SnrDb, DownSampRatio= DownSampRatio, DEBUG= DEBUG)
+        self.data_train = iRadon(Sinogram, snr_db= SnrDb, DownSampRatio= DownSampRatio, DEBUG= DEBUG)
         
         #self.data_train=self._load_file(self.data_files[0],'sparse')
         #self.data_label=self._load_file(self.data_files[0],'label')
@@ -289,6 +317,9 @@ class ImageDataProvider_hdf5(BaseDataProvider):
             #plt.show()
             #plt.imshow(self.data_label[:,:,0,0])
             #plt.show()
+            snr = computeRegressedSNR(self.data_train[:,:,0,0],
+                                      self.data_label[:,:,0,0])
+            print("SNR input %0.4f applied %0.4f"% SnrDb, snr)
             pdb.set_trace()
 
         self.tN=self.data_train.shape[-1]
