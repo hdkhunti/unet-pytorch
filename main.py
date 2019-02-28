@@ -24,6 +24,7 @@ import torchvision.models as models
 
 from image_util import ImageDataProvider_mat
 from image_util import ImageDataProvider_hdf5
+from image_util import computeRegressedSNR
 from model import UNet
 
 model_names = sorted(name for name in models.__dict__
@@ -78,6 +79,12 @@ parser.add_argument('--TrainData',type=str,
                     help='Training .mat file path')
 parser.add_argument('--TestData',type=str,
                     help='Tet .mat file path')
+parse.add_argument('--DownSample', type=str,
+                    help='Python array of Down Sample ratio [10 20 30]')
+parse.add_argument('--SnrDb', type=str,
+                    help='Python array of SnrDb [10  20  30]')
+parse.add_argument('--OutDir',type=str,
+                    help ='Output directory path it should exist')
 best_acc1 = 0
 
 
@@ -138,38 +145,77 @@ def main_worker(gpu, ngpus_per_node, args):
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
     else:
         train_sampler = None
-    #temp = ImageDataProvider_hdf5("../NaturalImagesTrainSet.mat",is_flipping=False)
-    print(train_sampler)
-    #TrainDataPath = ".\Data\CT_Head_Neck_Train.mat"
-    print("Training Data: %s"%args.TrainData)
-    TrainDataPath = args.TrainData
-    train_loader = torch.utils.data.DataLoader(\
-        ImageDataProvider_hdf5(TrainDataPath,SinoVar='Sinogram',GrdTruthVar='FBPImage',DownSampRatio=2,is_flipping=False),
-        batch_size=args.batch_size, shuffle=(train_sampler is None),
-        num_workers=args.workers, pin_memory=True, sampler=train_sampler)
     
-    #TestDataPath = ".\Data\CT_Head_Neck_Test.mat"
-    print("Test Data: %s"%args.TestData)
-    TestDataPath = args.TestData
-    val_loader = torch.utils.data.DataLoader(\
-        ImageDataProvider_hdf5(TestDataPath,SinoVar='Sinogram',GrdTruthVar='FBPImage',DownSampRatio=2,is_flipping=False),
-        batch_size=args.batch_size, shuffle=False,
-        num_workers=args.workers, pin_memory=True)
+    print(train_sampler)
+    # Get SNR and Down Sample Values
+    SnrDb = eval(args.SnrDb)
+    DownSamp = eval(args.DownSample)
+    print("Down Sample value:",DownSamp)
+    print("Snr Values:", SnrDb)
+    # Train data
+    
 
-    if args.evaluate:
-        validate(val_loader, model, criterion, args)
-        return
+    TrainDataPath = args.TrainData
+    loss_test = np.zeros(args.epochs,len(SnrDb),len(DownSamp))
+    RecSnrMean = np.zeros(args.epochs,len(SnrDb),len(DownSamp))
+    for SnrIdx in range(len(SnrDb)):
+        for DownSampIdx in range(len(DownSamp)):
+            print("Snr %d DownSamp %d" % (SnrDb[SnrIdx], DownSamp[DownSampIdx]))
+            print("Training Data: %s" % (args.TrainData))
+            
+            train_loader = torch.utils.data.DataLoader(
+                ImageDataProvider_hdf5( TrainDataPath,
+                                        SinoVar='Sinogram',
+                                        GrdTruthVar='FBPImage',
+                                        DownSampRatio=DownSamp[DownSampIdx],
+                                        SnrDb=SnrDb[SnrIdx],
+                                        is_flipping=False),
+                batch_size=args.batch_size, shuffle=(train_sampler is None),
+                num_workers=args.workers, pin_memory=True, sampler=train_sampler)
+            
+            #TestDataPath = ".\Data\CT_Head_Neck_Test.mat"
+            print("Test Data: %s"%args.TestData)
+            TestDataPath = args.TestData
+            val_loader = torch.utils.data.DataLoader(\
+                ImageDataProvider_hdf5(TestDataPath,
+                                        SinoVar='Sinogram',
+                                        GrdTruthVar='FBPImage',
+                                        DownSampRatio=DownSamp[DownSampIdx],
+                                        SnrDb=SnrDb[SnrIdx],
+                                        is_flipping=False),
+                batch_size=args.batch_size, shuffle=False,
+                num_workers=args.workers, pin_memory=True)
 
-    for epoch in range(args.start_epoch, args.epochs):
-        if args.distributed:
-            train_sampler.set_epoch(epoch)
-        adjust_learning_rate(optimizer, epoch, args)
+            if args.evaluate:
+                validate(val_loader, model, criterion, args)
+                return
 
-        # train for one epoch
-        train(train_loader, model, criterion, optimizer, epoch, args)
+            for epoch in range(args.start_epoch, args.epochs):
+                if args.distributed:
+                    train_sampler.set_epoch(epoch)
+                adjust_learning_rate(optimizer, epoch, args)
 
-        # evaluate on validation set
-        loss_test = validate(val_loader, model, criterion, epoch, args)
+                # train for one epoch
+                train(train_loader, model, criterion, optimizer, epoch, args)
+
+                # evaluate on validation set
+                loss_test[epoch,DownSampIdx,SnrIdx], RecSnrMean[epoch,DownSampIdx,SnrIdx] = \
+                                    validate(val_loader, model, criterion, epoch, args)
+        plt.figure(1)
+        plt.plot(DownSamp,loss_test[-1,:,SnrIdx],label="Snr = %0.2f dB "%(SnrDb[SnrIdx]))
+        plt.ylabel('L1_Loss')
+        plt.xlabel('Down Sampling Ratio')
+        plt.figure(2)
+        plt.plot(DownSamp,RecSnrMean[-1,:,SnrIdx],label="Snr = %0.2f dB "%(SnrDb[SnrIdx]))
+        plt.ylabel('Reconstructed Image SNR')
+        plt.xlabel('Down Sampling Ratio')
+
+    plt.figure(1)
+    plt.savefig(args.OutDir+'/LossVsDownSampVsSnr.png')
+    plt.figure(2)
+    plt.savefig(args.OutDir+'/RecSnrVsDownSampVsSnr.png')
+    plt.clf()
+    
 
 
 def train(train_loader, model, criterion, optimizer, epoch, args):
@@ -223,6 +269,8 @@ def validate(val_loader, model, criterion, epoch, args):
 
     # switch to evaluate mode
     model.eval()
+    #Reconstructed Image SNR
+    RecSnr = np.zeros(len(val_loader), 1, dtype='float')
 
     with torch.no_grad():
         end = time.time()
@@ -243,7 +291,8 @@ def validate(val_loader, model, criterion, epoch, args):
             loss = criterion(output, target.type(torch.cuda.FloatTensor))
 
             losses.update(loss.item(), input.size(0))
-
+            # Measure SNR 
+            RecSnr[i] = computeRegressedSNR(input,target)
             # measure elapsed time
             batch_time.update(time.time() - end)
             end = time.time()
@@ -253,7 +302,7 @@ def validate(val_loader, model, criterion, epoch, args):
                       'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                       'Loss {loss.val:.4f} ({loss.avg:.4f})\t'.format(
                        i, len(val_loader), batch_time=batch_time, loss=losses))
-    return losses.avg
+    return losses.avg, RecSnr.mean()
 
 
 class AverageMeter(object):

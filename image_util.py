@@ -41,33 +41,35 @@ def flipping(img,gt):
         out_gt=np.flipud(out_gt)
     return out, out_gt
 def computeRegressedSNR(rec,oracle):
-
+    '''
+        HDK: This SNR is not matching the SNR that was create for noise addition.
+    '''
     # type convert oracle and recreated data
-    oracle = np.array(oracle,dtype=float);
-    #print("oracle = ",oracle);
-    rec = np.array(rec,dtype=float);
-    #print("rec = ",rec);
+    oracle = np.array(oracle,dtype=float)
+    #print("oracle = ",oracle)
+    rec = np.array(rec,dtype=float)
+    #print("rec = ",rec)
     
     # perform required operations
-    sumP = oracle.sum();
-    sumI = rec.sum();
-    IP = oracle*rec;
-    sumIP = IP.sum();
-    I2 = rec**2;
-    sumI2 = I2.sum();
-    (Nrows_oracle,Ncols_oracle) = np.shape(oracle);
-    Noracle = Nrows_oracle*Ncols_oracle;
-    A = np.array(([sumI2,sumI],[sumI,Noracle]),dtype=float);
-    b = np.array(([sumIP],[sumP]),dtype=float);
-    A_pinv = np.linalg.pinv(A);
-    c = np.matmul(A_pinv,b);
-    rec = c[0]*rec + c[1];
-    diff2 = (oracle - rec)**2;
-    err = diff2.sum();
-    P2 = oracle**2;
-    SNR = 10*np.log10(P2.sum()/err);
+    sumP = oracle.sum()
+    sumI = rec.sum()
+    IP = oracle*rec
+    sumIP = IP.sum()
+    I2 = rec**2
+    sumI2 = I2.sum()
+    (Nrows_oracle,Ncols_oracle) = np.shape(oracle)
+    Noracle = Nrows_oracle*Ncols_oracle
+    A = np.array(([sumI2,sumI],[sumI,Noracle]),dtype=float)
+    b = np.array(([sumIP],[sumP]),dtype=float)
+    A_pinv = np.linalg.pinv(A)
+    c = np.matmul(A_pinv,b)
+    rec = c[0]*rec + c[1]
+    diff2 = (oracle - rec)**2
+    err = diff2.sum()
+    P2 = oracle**2
+    SNR = 10*np.log10(P2.sum()/err)
     
-    return SNR;
+    return SNR
 
 def iRadon(Sinogram, snr_db, DownSampRatio, DEBUG = False):
     # iRadon transform
@@ -85,16 +87,16 @@ def iRadon(Sinogram, snr_db, DownSampRatio, DEBUG = False):
         norm_sinogram = np.linalg.norm(Sinogram[:,:,0,i], 'fro')
         sigma_noise = 1 / np.sqrt(10 ** (snr_db / 10) / (norm_sinogram ** 2 / (Nviews * NumMeas)))
         noise = np.random.normal(0, sigma_noise, (Nviews, NumMeas))
-        # print("Noise = ",noise);
+        # print("Noise = ",noise)
         NoisySinogram = Sinogram[:,:,0,i] + noise
         #FBPimages[:, :, 0, i] = iradon(NoisySinogram[:,np.arange(0, NumMeas, DownSampRatio), 0, i], theta, output_size=512, circle=True)
         FBP = iradon(NoisySinogram[:, np.arange(0, NumMeas, DownSampRatio)], theta, output_size=512, circle=False)
         FBPimages[:, :, 0, i] = FBP 
 
-        if(DEBUG):
-           plt.imsave('./testimg/fbpimage.png',FBPimages[:, :, 0, 0])
-           #plt.figsave('./testimg/fbpimage.png')
-           pdb.set_trace()
+    if(DEBUG):
+        plt.imsave('./testimg/fbpimage.png',FBPimages[:, :, 0, 0])
+        #plt.figsave('./testimg/fbpimage.png')
+        pdb.set_trace()
     return FBPimages
 
 class BaseDataProvider(object):
@@ -319,7 +321,7 @@ class ImageDataProvider_hdf5(BaseDataProvider):
             #plt.show()
             snr = computeRegressedSNR(self.data_train[:,:,0,0],
                                       self.data_label[:,:,0,0])
-            print("SNR input %0.4f applied %0.4f"% SnrDb, snr)
+            print("SNR input %0.4f applied %0.4f"%(SnrDb, snr))
             pdb.set_trace()
 
         self.tN=self.data_train.shape[-1]
@@ -469,7 +471,7 @@ if __name__ == '__main__':
     ImageDataProvider_hdf5( DataPath,
                             SinoVar='Sinogram',
                             GrdTruthVar='FBPImage',
-                            SnrDb= 10,
-                            DownSampRatio=20,
+                            SnrDb= 2,
+                            DownSampRatio=1,
                             is_flipping=False,
                             DEBUG = True)
