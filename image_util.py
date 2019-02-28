@@ -60,13 +60,13 @@ def iRadon(Sinogram, snr_db, DownSampRatio, DEBUG = False):
         # print("Noise = ",noise);
         NoisySinogram = Sinogram[:,:,0,i] + noise
         #FBPimages[:, :, 0, i] = iradon(NoisySinogram[:,np.arange(0, NumMeas, DownSampRatio), 0, i], theta, output_size=512, circle=True)
-        FBP = iradon(NoisySinogram[:, np.arange(0, NumMeas, DownSampRatio)], theta, output_size=514, circle=True)
-        FBPimages[:, :, 0, i] = FBP[np.arange(1, 513),np.arange(1, 513)]
+        FBP = iradon(NoisySinogram[:, np.arange(0, NumMeas, DownSampRatio)], theta, output_size=512, circle=False)
+        FBPimages[:, :, 0, i] = FBP 
     
-    if(DEBUG):
-        plt.imshow(FBPimages[:, :, 0, 0])
-        plt.show()
-        pdb.set_trace()
+        if(DEBUG):
+           plt.imsave('./testimg/fbpimage.png',FBPimages[:, :, 0, 0])
+           #plt.figsave('./testimg/fbpimage.png')
+           pdb.set_trace()
     return FBPimages
 
 class BaseDataProvider(object):
@@ -285,10 +285,10 @@ class ImageDataProvider_hdf5(BaseDataProvider):
         self.data_label = self.data_label.transpose()
         print(np.shape(self.data_label))
         if DEBUG:
-            plt.imshow(self.data_train[:,:,0,0])
-            plt.show()
-            plt.imshow(self.data_label[:,:,0,0])
-            plt.show()
+            #plt.imshow(self.data_train[:,:,0,0])
+            #plt.show()
+            #plt.imshow(self.data_label[:,:,0,0])
+            #plt.show()
             pdb.set_trace()
 
         self.tN=self.data_train.shape[-1]
@@ -439,6 +439,6 @@ if __name__ == '__main__':
                             SinoVar='Sinogram',
                             GrdTruthVar='FBPImage',
                             SnrDb= 10,
-                            DownSampRatio=2,
+                            DownSampRatio=20,
                             is_flipping=False,
                             DEBUG = True)
