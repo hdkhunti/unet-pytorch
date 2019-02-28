@@ -7,6 +7,7 @@ import warnings
 import sys
 import cv2
 import numpy as np
+import pdb
 from matplotlib import pyplot as plt
 
 import torch
@@ -79,11 +80,11 @@ parser.add_argument('--TrainData',type=str,
                     help='Training .mat file path')
 parser.add_argument('--TestData',type=str,
                     help='Tet .mat file path')
-parse.add_argument('--DownSample', type=str,
+parser.add_argument('--DownSample', type=str,
                     help='Python array of Down Sample ratio [10 20 30]')
-parse.add_argument('--SnrDb', type=str,
+parser.add_argument('--SnrDb', type=str,
                     help='Python array of SnrDb [10  20  30]')
-parse.add_argument('--OutDir',type=str,
+parser.add_argument('--OutDir',type=str,
                     help ='Output directory path it should exist')
 best_acc1 = 0
 
@@ -156,8 +157,8 @@ def main_worker(gpu, ngpus_per_node, args):
     
 
     TrainDataPath = args.TrainData
-    loss_test = np.zeros(args.epochs,len(SnrDb),len(DownSamp))
-    RecSnrMean = np.zeros(args.epochs,len(SnrDb),len(DownSamp))
+    loss_test = np.zeros((args.epochs,len(DownSamp),len(SnrDb)), dtype=float)
+    RecSnrMean = np.zeros((args.epochs,len(DownSamp),len(SnrDb)), dtype=float)
     for SnrIdx in range(len(SnrDb)):
         for DownSampIdx in range(len(DownSamp)):
             print("Snr %d DownSamp %d" % (SnrDb[SnrIdx], DownSamp[DownSampIdx]))
@@ -270,7 +271,7 @@ def validate(val_loader, model, criterion, epoch, args):
     # switch to evaluate mode
     model.eval()
     #Reconstructed Image SNR
-    RecSnr = np.zeros(len(val_loader), 1, dtype='float')
+    RecSnr = np.zeros((len(val_loader), 1), dtype=float)
 
     with torch.no_grad():
         end = time.time()
@@ -292,7 +293,10 @@ def validate(val_loader, model, criterion, epoch, args):
 
             losses.update(loss.item(), input.size(0))
             # Measure SNR 
-            RecSnr[i] = computeRegressedSNR(input,target)
+            #pdb.set_trace()
+            output = output.cpu()
+            target = target.cpu()
+            RecSnr[i] = computeRegressedSNR(output[0,0,:,:],target[0,0,:,:])
             # measure elapsed time
             batch_time.update(time.time() - end)
             end = time.time()
