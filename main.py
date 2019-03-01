@@ -8,6 +8,8 @@ import sys
 import cv2
 import numpy as np
 import pdb
+import matplotlib
+matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 
 import torch
@@ -285,7 +287,7 @@ def validate(val_loader, model, criterion, epoch, args):
 
             #write out the sample
             if i == 0:
-                imgname = './testimg/'+str(epoch) + '.jpg'
+                imgname = args.OutDir + '/' + str(epoch) + '.jpg'
                 plt.imsave(imgname, output[0,:,:,:].squeeze().data.cpu().numpy())
 
 
