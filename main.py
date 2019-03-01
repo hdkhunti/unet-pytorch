@@ -89,6 +89,10 @@ parser.add_argument('--SnrDb', type=str,
                     help='Python array of SnrDb [10  20  30]')
 parser.add_argument('--OutDir',type=str,
                     help ='Output directory path it should exist')
+
+parser.add_argument('--TrainedModelPath',type=str,
+                    help ='Trained Model Path/filename ')
+
 best_acc1 = 0
 
 
@@ -191,16 +195,6 @@ def main_worker(gpu, ngpus_per_node, args):
                 print("Directory " , dirName ,  " already exists")    
             
             
-            train_loader = torch.utils.data.DataLoader(
-                ImageDataProvider_hdf5( TrainDataPath,
-                                        SinoVar='Sinogram',
-                                        GrdTruthVar='FBPImage',
-                                        DownSampRatio=DownSamp[DownSampIdx],
-                                        SnrDb=SnrDb[SnrIdx],
-                                        is_flipping=False),
-                batch_size=args.batch_size, shuffle=(train_sampler is None),
-                num_workers=args.workers, pin_memory=True, sampler=train_sampler)
-            
             #TestDataPath = ".\Data\CT_Head_Neck_Test.mat"
             
             TestDataPath = args.TestData
@@ -215,9 +209,26 @@ def main_worker(gpu, ngpus_per_node, args):
                 num_workers=args.workers, pin_memory=True)
 
             if args.evaluate:
-                validate(val_loader, model, criterion, args,ImageDir=dirName)
-                return
+                model.load_state_dict(torch.load(args.TrainedModelPath))
+                model.eval()
+                loss_test[0, DownSampIdx, SnrIdx], RecSnrMean[0,DownSampIdx,SnrIdx] = \
+                                    validate(val_loader, model, criterion, 0, args, ImageDir=dirName)
+                    
+                #validate(val_loader, model, criterion, args,ImageDir=dirName)
+                #not return, continue from the start of the loop
+                continue 
 
+            
+            train_loader = torch.utils.data.DataLoader(
+                ImageDataProvider_hdf5( TrainDataPath,
+                                        SinoVar='Sinogram',
+                                        GrdTruthVar='FBPImage',
+                                        DownSampRatio=DownSamp[DownSampIdx],
+                                        SnrDb=SnrDb[SnrIdx],
+                                        is_flipping=False),
+                batch_size=args.batch_size, shuffle=(train_sampler is None),
+                num_workers=args.workers, pin_memory=True, sampler=train_sampler)
+            
             for epoch in range(args.start_epoch, args.epochs):
                 if args.distributed:
                     train_sampler.set_epoch(epoch)
@@ -256,11 +267,12 @@ def main_worker(gpu, ngpus_per_node, args):
             plt.plot(x,RecSnrMean[:,DownSampIdx,SnrIdx],label="DownSampIdx = %0.2f Snr = %0.2f dB "%((DownSamp[DownSampIdx]),                 SnrDb[SnrIdx]))
             plt.ylabel('Reconstructed Image SNR')
             plt.xlabel('Epochs')
-            ## Save model using prick
-            #file_name_model = args.OutDir+str(SnrDb[SnrIdx])+'.pkl'
-            #file_model = open(file_name_model,'w')
-            #pickle.dump(file_model,model)
-            #file_model.close()
+            
+            ## Save model 
+            file_name_model = args.OutDir+aStr.replace(' ','_')+'_UnetModel.ph'
+            torch.save(model.state_dict(), file_name_model)
+            
+    
     plt.figure(1)
     plt.legend()
     plt.savefig(args.OutDir+'LossVsEpochs.png')
@@ -344,7 +356,7 @@ def validate(val_loader, model, criterion, epoch, args, ImageDir='/' ):
 
             #write out the sample
             if i == 0:
-                imgname = args.OutDir + ImageDir + str(epoch) + '.jpg'
+                imgname = args.OutDir + ImageDir + '/' + str(epoch) + '.jpg'
                 plt.imsave(imgname, output[0,:,:,:].squeeze().data.cpu().numpy())
 
 
