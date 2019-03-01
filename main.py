@@ -8,6 +8,7 @@ import sys
 import cv2
 import numpy as np
 import pdb
+import pickle
 import matplotlib
 matplotlib.use('Agg')
 from matplotlib import pyplot as plt
@@ -155,16 +156,40 @@ def main_worker(gpu, ngpus_per_node, args):
     DownSamp = eval(args.DownSample)
     print("Down Sample value:",DownSamp)
     print("Snr Values:", SnrDb)
+    print("Training Data: %s" % (args.TrainData))
+    print("Test Data: %s"%args.TestData)
+    # add forward slash
+    if (args.OutDir[-1] != '/'):
+        args.OutDir += '/'
     # Train data
     
 
     TrainDataPath = args.TrainData
+    loss_train = np.zeros((args.epochs,len(DownSamp),len(SnrDb)), dtype=float)
     loss_test = np.zeros((args.epochs,len(DownSamp),len(SnrDb)), dtype=float)
     RecSnrMean = np.zeros((args.epochs,len(DownSamp),len(SnrDb)), dtype=float)
+    x=np.linspace(0,args.epochs,args.epochs)
+    k=1
     for SnrIdx in range(len(SnrDb)):
+        ## updating the model for each SNR IDX
+        model = UNet(1, depth=5, merge_mode='concat')
+        model = model.cuda(args.gpu)
+        torch.cuda.set_device(args.gpu)
+        model = model.cuda(args.gpu)
+        
+        ######
         for DownSampIdx in range(len(DownSamp)):
-            print("Snr %d DownSamp %d" % (SnrDb[SnrIdx], DownSamp[DownSampIdx]))
-            print("Training Data: %s" % (args.TrainData))
+            loss_data = Loss_Data(args.epochs)
+            aStr ="Snr %d DownSamp %d" % (SnrDb[SnrIdx], DownSamp[DownSampIdx]) 
+            print(aStr)
+            dirname = aStr.replace(' ','_')
+
+            if not os.path.exists(arg.OutDir+dirName):
+                os.makedirs(arg.OutDir+dirName)
+                print("Directory " , dirName ,  " Created ")
+            else:    
+                print("Directory " , dirName ,  " already exists")    
+            
             
             train_loader = torch.utils.data.DataLoader(
                 ImageDataProvider_hdf5( TrainDataPath,
@@ -177,7 +202,7 @@ def main_worker(gpu, ngpus_per_node, args):
                 num_workers=args.workers, pin_memory=True, sampler=train_sampler)
             
             #TestDataPath = ".\Data\CT_Head_Neck_Test.mat"
-            print("Test Data: %s"%args.TestData)
+            
             TestDataPath = args.TestData
             val_loader = torch.utils.data.DataLoader(\
                 ImageDataProvider_hdf5(TestDataPath,
@@ -190,7 +215,7 @@ def main_worker(gpu, ngpus_per_node, args):
                 num_workers=args.workers, pin_memory=True)
 
             if args.evaluate:
-                validate(val_loader, model, criterion, args)
+                validate(val_loader, model, criterion, args,ImageDir=dirName)
                 return
 
             for epoch in range(args.start_epoch, args.epochs):
@@ -199,25 +224,56 @@ def main_worker(gpu, ngpus_per_node, args):
                 adjust_learning_rate(optimizer, epoch, args)
 
                 # train for one epoch
-                train(train_loader, model, criterion, optimizer, epoch, args)
+                loss_train[epoch,DownSampIdx,SnrIdx] = train(train_loader, model, criterion, optimizer, epoch, args)
 
                 # evaluate on validation set
                 loss_test[epoch,DownSampIdx,SnrIdx], RecSnrMean[epoch,DownSampIdx,SnrIdx] = \
                                     validate(val_loader, model, criterion, epoch, args)
-        plt.figure(1)
-        plt.plot(DownSamp,loss_test[-1,:,SnrIdx],label="Snr = %0.2f dB "%(SnrDb[SnrIdx]))
-        plt.ylabel('L1_Loss')
-        plt.xlabel('Down Sampling Ratio')
-        plt.figure(2)
-        plt.plot(DownSamp,RecSnrMean[-1,:,SnrIdx],label="Snr = %0.2f dB "%(SnrDb[SnrIdx]))
-        plt.ylabel('Reconstructed Image SNR')
-        plt.xlabel('Down Sampling Ratio')
+                
+            loss_data.update(SnrDb[SnrIdx],
+                            DownSamp[DownSampIdx],
+                            loss_train[:,DownSampIdx,SnrIdx],
+                            loss_test[:,DownSampIdx,SnrIdx])
 
+            file_name =args.OutDir+str(SnrDb[SnrIdx])+'_'+str(DownSamp[DownSampIdx])+'.pkl'
+            #print('SNR %f DS %F', (loss_data.SNRdb,loss_data.Downsampling))
+            file_loss_data = open(file_name,'w')
+            pickle.dump(loss_data,file_loss_data)
+            file_loss_data.close()
+                
+            ##To check
+            #pkl_file = open(file_name, 'r')
+            #data1 = pickle.load(pkl_file)
+            #print("Test Print")
+            #print(data1.SNRdb,data1.Downsampl)
+            ####
+            plt.figure(1)
+            plt.plot(x,loss_train[:,DownSampIdx,SnrIdx],label="DownSampIdx = %0.2f Snr = %0.2f dB "%((DownSamp[DownSampIdx]),                     SnrDb[SnrIdx]))
+            plt.ylabel('L1_Loss')
+            plt.xlabel('Epochs')
+           
+            plt.figure(2)
+            plt.plot(x,RecSnrMean[:,DownSampIdx,SnrIdx],label="DownSampIdx = %0.2f Snr = %0.2f dB "%((DownSamp[DownSampIdx]),                 SnrDb[SnrIdx]))
+            plt.ylabel('Reconstructed Image SNR')
+            plt.xlabel('Epochs')
+            ## Save model using prick
+            file_name_model = args.OutDir+str(SnrDb[SnrIdx])+'.pkl'
+            file_model = open(file_name_model,'w')
+            pickle.dump(file_model,model)
+            file_model.close()
     plt.figure(1)
-    plt.savefig(args.OutDir+'/LossVsDownSampVsSnr.png')
+    plt.legend()
+    plt.savefig(args.OutDir+'LossVsEpochs.png')
     plt.figure(2)
-    plt.savefig(args.OutDir+'/RecSnrVsDownSampVsSnr.png')
+    plt.legend()
+    plt.savefig(args.OutDir+'RecSnrVsEpochs.png')
     plt.clf()
+    # Save the matrix 
+    file_name =args.OutDir+'LossVsSnrVsDwnsamp'+'.pkl'
+    with open(file_name, 'w') as f:  # Python 3: open(..., 'wb')
+        pickle.dump([SnrDb,DownSamp,loss_train,loss_test,RecSnrMean],file_plot_pickle)
+    
+
     
 
 
@@ -264,9 +320,10 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
                   'Loss {loss.val:.4f} ({loss.avg:.4f})\t'.format(
                    epoch, i, len(train_loader), batch_time=batch_time,
                    data_time=data_time, loss=losses))
+    return losses.avg
 
 
-def validate(val_loader, model, criterion, epoch, args):
+def validate(val_loader, model, criterion, epoch, args, ImageDir='' ):
     batch_time = AverageMeter()
     losses = AverageMeter()
 
@@ -287,7 +344,7 @@ def validate(val_loader, model, criterion, epoch, args):
 
             #write out the sample
             if i == 0:
-                imgname = args.OutDir + '/' + str(epoch) + '.jpg'
+                imgname = args.OutDir + ImageDir + str(epoch) + '.jpg'
                 plt.imsave(imgname, output[0,:,:,:].squeeze().data.cpu().numpy())
 
 
@@ -310,6 +367,21 @@ def validate(val_loader, model, criterion, epoch, args):
                        i, len(val_loader), batch_time=batch_time, loss=losses))
     return losses.avg, RecSnr.mean()
 
+class Loss_Data(object):
+    def __init__(self,epochs):
+        self.reset(epochs)
+        
+    def reset(self,epochs):
+        self.SNRdb = 0
+        self.Downsampling = 0
+        self.Train_Loss = np.zeros((epochs,1),dtype=float)
+        self.Validate_Loss = np.zeros((epochs,1),dtype = float)
+        
+    def update(self,SNRdb, Downsampling, Train_Loss,Validate_Loss):
+        self.SNRdb = SNRdb
+        self.Downsampling = Downsampling
+        self.Train_Loss = Train_Loss
+        self.Validate_Loss = Validate_Loss
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
