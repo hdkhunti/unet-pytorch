@@ -82,7 +82,7 @@ parser.add_argument('--multiprocessing-distributed', action='store_true',
 parser.add_argument('--TrainData',type=str,
                     help='Training .mat file path')
 parser.add_argument('--TestData',type=str,
-                    help='Tet .mat file path')
+                    help='Test .mat file path')
 parser.add_argument('--DownSample', type=str,
                     help='Python array of Down Sample ratio [10 20 30]')
 parser.add_argument('--SnrDb', type=str,
@@ -182,10 +182,10 @@ def main_worker(gpu, ngpus_per_node, args):
             loss_data = Loss_Data(args.epochs)
             aStr ="Snr %d DownSamp %d" % (SnrDb[SnrIdx], DownSamp[DownSampIdx]) 
             print(aStr)
-            dirname = aStr.replace(' ','_')
+            dirName = aStr.replace(' ','_')
 
-            if not os.path.exists(arg.OutDir+dirName):
-                os.makedirs(arg.OutDir+dirName)
+            if not os.path.exists(args.OutDir+dirName):
+                os.makedirs(args.OutDir+dirName)
                 print("Directory " , dirName ,  " Created ")
             else:    
                 print("Directory " , dirName ,  " already exists")    
@@ -228,7 +228,7 @@ def main_worker(gpu, ngpus_per_node, args):
 
                 # evaluate on validation set
                 loss_test[epoch,DownSampIdx,SnrIdx], RecSnrMean[epoch,DownSampIdx,SnrIdx] = \
-                                    validate(val_loader, model, criterion, epoch, args)
+                                    validate(val_loader, model, criterion, epoch, args, ImageDir=dirName)
                 
             loss_data.update(SnrDb[SnrIdx],
                             DownSamp[DownSampIdx],
@@ -257,10 +257,10 @@ def main_worker(gpu, ngpus_per_node, args):
             plt.ylabel('Reconstructed Image SNR')
             plt.xlabel('Epochs')
             ## Save model using prick
-            file_name_model = args.OutDir+str(SnrDb[SnrIdx])+'.pkl'
-            file_model = open(file_name_model,'w')
-            pickle.dump(file_model,model)
-            file_model.close()
+            #file_name_model = args.OutDir+str(SnrDb[SnrIdx])+'.pkl'
+            #file_model = open(file_name_model,'w')
+            #pickle.dump(file_model,model)
+            #file_model.close()
     plt.figure(1)
     plt.legend()
     plt.savefig(args.OutDir+'LossVsEpochs.png')
@@ -270,8 +270,8 @@ def main_worker(gpu, ngpus_per_node, args):
     plt.clf()
     # Save the matrix 
     file_name =args.OutDir+'LossVsSnrVsDwnsamp'+'.pkl'
-    with open(file_name, 'w') as f:  # Python 3: open(..., 'wb')
-        pickle.dump([SnrDb,DownSamp,loss_train,loss_test,RecSnrMean],file_plot_pickle)
+    with open(file_name, 'w') as f:
+        pickle.dump([SnrDb, DownSamp, loss_train, loss_test, RecSnrMean],f)
     
 
     
@@ -323,7 +323,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
     return losses.avg
 
 
-def validate(val_loader, model, criterion, epoch, args, ImageDir='' ):
+def validate(val_loader, model, criterion, epoch, args, ImageDir='/' ):
     batch_time = AverageMeter()
     losses = AverageMeter()
 
