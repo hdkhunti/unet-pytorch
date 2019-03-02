@@ -7,6 +7,7 @@ import warnings
 import sys
 import cv2
 import numpy as np
+import datetime 
 import pdb
 import pickle
 import matplotlib
@@ -97,6 +98,8 @@ best_acc1 = 0
 
 
 def main():
+    StartTime = datetime.datetime.now()
+    
     args = parser.parse_args()
 
     if args.seed is not None:
@@ -129,25 +132,12 @@ def main():
     else:
         # Simply call main_worker function
         main_worker(args.gpu, ngpus_per_node, args)
-
+    
+    StopTime = datetime.datetime.now()
+    print("StartTime %s StopTime %s RunTime %s"%(str(StartTime), str(StopTime), str(StopTime-StartTime)))
 
 def main_worker(gpu, ngpus_per_node, args):
     args.gpu = gpu
-
-    # create model
-    model = UNet(1, depth=5, merge_mode='concat')
-    model = model.cuda(args.gpu)
-    torch.cuda.set_device(args.gpu)
-    model = model.cuda(args.gpu)
-
-    # define loss function (criterion) and optimizer
-    criterion = nn.L1Loss().cuda(args.gpu)
-
-    optimizer = torch.optim.SGD(model.parameters(), args.lr,
-                                momentum=args.momentum,
-                                weight_decay=args.weight_decay)
-
-    cudnn.benchmark = True
 
     if args.distributed:
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
@@ -165,9 +155,8 @@ def main_worker(gpu, ngpus_per_node, args):
     # add forward slash
     if (args.OutDir[-1] != '/'):
         args.OutDir += '/'
-    # Train data
     
-
+    # Train data
     TrainDataPath = args.TrainData
     loss_train = np.zeros((args.epochs,len(DownSamp),len(SnrDb)), dtype=float)
     loss_test = np.zeros((args.epochs,len(DownSamp),len(SnrDb)), dtype=float)
@@ -175,11 +164,20 @@ def main_worker(gpu, ngpus_per_node, args):
     x=np.linspace(0,args.epochs,args.epochs)
     k=1
     for SnrIdx in range(len(SnrDb)):
-        ## updating the model for each SNR IDX
+        # create model
         model = UNet(1, depth=5, merge_mode='concat')
         model = model.cuda(args.gpu)
         torch.cuda.set_device(args.gpu)
         model = model.cuda(args.gpu)
+
+        # define loss function (criterion) and optimizer
+        criterion = nn.L1Loss().cuda(args.gpu)
+
+        optimizer = torch.optim.SGD(model.parameters(), args.lr,
+                                    momentum=args.momentum,
+                                    weight_decay=args.weight_decay)
+
+        cudnn.benchmark = True
         
         ######
         for DownSampIdx in range(len(DownSamp)):

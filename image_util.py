@@ -83,20 +83,30 @@ def iRadon(Sinogram, snr_db, DownSampRatio, DEBUG = False):
     
     # This loop can be parallized for speedup, seems very slow right now
     for i in range(NumImage):
-        # add Gaussian Noise to input sinogram image
-        norm_sinogram = np.linalg.norm(Sinogram[:,:,0,i], 'fro')
-        sigma_noise = 1 / np.sqrt(10 ** (snr_db / 10) / (norm_sinogram ** 2 / (Nviews * NumMeas)))
-        noise = np.random.normal(0, sigma_noise, (Nviews, NumMeas))
-        # print("Noise = ",noise)
-        NoisySinogram = Sinogram[:,:,0,i] + noise
-        #FBPimages[:, :, 0, i] = iradon(NoisySinogram[:,np.arange(0, NumMeas, DownSampRatio), 0, i], theta, output_size=512, circle=True)
-        FBP = iradon(NoisySinogram[:, np.arange(0, NumMeas, DownSampRatio)], theta, output_size=512, circle=False)
-        FBPimages[:, :, 0, i] = FBP 
+        if 0:
+            # add Gaussian Noise to input sinogram image
+            norm_sinogram = np.linalg.norm(Sinogram[:,:,0,i], 'fro')
+            sigma_noise = 1 / np.sqrt(10 ** (snr_db / 10) / (norm_sinogram ** 2 / (Nviews * NumMeas)))
+            noise = np.random.normal(0, sigma_noise, (Nviews, NumMeas))
+            # print("Noise = ",noise)
+            NoisySinogram = Sinogram[:,:,0,i] + noise
+            #FBPimages[:, :, 0, i] = iradon(NoisySinogram[:,np.arange(0, NumMeas, DownSampRatio), 0, i], theta, output_size=512, circle=True)
+            FBP = iradon(NoisySinogram[:, np.arange(0, NumMeas, DownSampRatio)], theta, output_size=512, circle=False)
+            FBPimages[:, :, 0, i] = FBP 
+        else:
+            FBP = iradon(Sinogram[:, np.arange(0, NumMeas, DownSampRatio),0,i], theta, output_size=514, circle=False)
+            FBP = FBP[2:,2:]
+            NormFbp = np.linalg.norm(FBP, 'fro')
+            sigma_noise = 1 / np.sqrt(10 ** (snr_db / 10) / (NormFbp ** 2 / (512 * 512)))
+            noise = np.random.normal(0, sigma_noise, (512, 512))
+            
+            FBPimages[:, :, 0, i] = FBP  + noise
 
-    if(DEBUG):
-        plt.imsave('./testimg/fbpimage.png',FBPimages[:, :, 0, 0])
-        #plt.figsave('./testimg/fbpimage.png')
-        pdb.set_trace()
+        if(DEBUG):
+            plt.imsave('./testimg/fbpimage.png',FBPimages[:, :, 0, 0])
+            #plt.figsave('./testimg/fbpimage.png')
+            pdb.set_trace()
+            break;
     return FBPimages
 
 class BaseDataProvider(object):
@@ -322,6 +332,8 @@ class ImageDataProvider_hdf5(BaseDataProvider):
             snr = computeRegressedSNR(self.data_train[:,:,0,0],
                                       self.data_label[:,:,0,0])
             print("SNR input %0.4f applied %0.4f"%(SnrDb, snr))
+            temp = self.data_train[:,:,0,0] - self.data_label[:,:,0,0]
+            plt.imsave('./testimg/LabelDiffFbp.png',temp)
             pdb.set_trace()
 
         self.tN=self.data_train.shape[-1]
@@ -471,7 +483,7 @@ if __name__ == '__main__':
     ImageDataProvider_hdf5( DataPath,
                             SinoVar='Sinogram',
                             GrdTruthVar='FBPImage',
-                            SnrDb= 2,
+                            SnrDb = 40,
                             DownSampRatio=1,
                             is_flipping=False,
                             DEBUG = True)
