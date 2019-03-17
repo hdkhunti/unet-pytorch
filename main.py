@@ -32,6 +32,8 @@ from image_util import ImageDataProvider_hdf5
 from image_util import computeRegressedSNR
 from model import UNet
 
+import ImageGradient as ImGrad
+
 model_names = sorted(name for name in models.__dict__
     if name.islower() and not name.startswith("__")
     and callable(models.__dict__[name]))
@@ -171,8 +173,11 @@ def main_worker(gpu, ngpus_per_node, args):
         model = model.cuda(args.gpu)
 
         # define loss function (criterion) and optimizer
-        criterion = nn.L1Loss().cuda(args.gpu)
-
+        #criterion = nn.L1Loss().cuda(args.gpu)
+        #pdb.set_trace()
+        criterion = ImGrad.GradLoss
+        #pdb.set_trace()
+        
         optimizer = torch.optim.SGD(model.parameters(), args.lr,
                                     momentum=args.momentum,
                                     weight_decay=args.weight_decay)
