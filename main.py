@@ -211,7 +211,7 @@ def main_worker(gpu, ngpus_per_node, args):
                 model.eval()
                 loss_test[0, DownSampIdx, SnrIdx], RecSnrMean[0,DownSampIdx,SnrIdx] = \
                                     validate(val_loader, model, criterion, 0, args, ImageDir=dirName)
-                    
+                print("Evaluate: Snr %d DownSamp %d L1Loss%0.2f Snr %0.4f"%(SnrDb[SnrIdx], DownSamp[DownSampIdx], loss_test[0, DownSampIdx, SnrIdx], RecSnrMean[0,DownSampIdx,SnrIdx]))
                 #validate(val_loader, model, criterion, args,ImageDir=dirName)
                 #not return, continue from the start of the loop
                 continue 

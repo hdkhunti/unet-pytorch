@@ -119,7 +119,7 @@ def iRadon(Sinogram, snr_db, DownSampRatio, DEBUG = False, MULTI_PROCESS = True)
             for Np in range(NumPros):
                 FBPimages[:, :, 0, i+Np] = q[Np].get()
                 processes[Np].join()
-                print("Process %d: image %d done"%(Np,i+Np))
+                #print("Process %d: image %d done"%(Np,i+Np))
                 
             
             #IradonSlave(i,
